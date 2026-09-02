@@ -10,7 +10,7 @@ const weatherZ = z.enum(["sunny", "rain", "cloudy"]);
 const categoryZ = z.enum(["All", "Food", "Heritage", "Nature", "Craft", "Spiritual"]);
 
 const API_BASE_URL =
-  (typeof process !== "undefined" && process.env?.VITE_API_URL) || "http://localhost:8000/api/v1";
+  (typeof process !== "undefined" && process.env?.VITE_API_URL) || "http://localink-your-guide.onrender/api/v1";
 
 export const getRecommendations = createServerFn({ method: "POST" })
   .validator(
