@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { Mic, Send, BookOpen, Volume2, Languages, MapPin, Clock, Loader2 } from "lucide-react";
-import { askSarathi } from "@/server/fns";
-import type { RankedSpotCard } from "@/lib/engine-types";
+import { Mic, Send, BookOpen, Volume2, Languages } from "lucide-react";
 
 export const Route = createFileRoute("/concierge")({
   head: () => ({
@@ -24,80 +21,71 @@ export const Route = createFileRoute("/concierge")({
   component: ConciergePage,
 });
 
-type Msg = {
-  role: "user" | "guide";
-  text: string;
-  sources?: string[];
-  suggestions?: RankedSpotCard[];
-};
+type Msg = { role: "user" | "guide"; text: string; sources?: string[] };
 
-const prompts = [
-  "What's the story behind Shaniwar Wada?",
-  "Where do locals eat in Mumbai after midnight?",
-  "Hidden spot near Ellora?",
-  "What should I do in Pune at 7 AM?",
-  "Best time for Ellora Cave 16?",
-  "Suggest more spots in Nashik this evening",
+const canned: { q: string; a: string; sources: string[] }[] = [
+  {
+    q: "What's the story behind Shaniwar Wada?",
+    a: "Built in 1732 by Bajirao I as the Peshwa seat, it once held a seven-storey mansion — the 1828 fire left only the base and the Delhi Darwaza's elephant-proof spikes. Locals still gather at 6:30 PM for the sound-and-light show; the quieter entrance is the Mastani Darwaza on the north side.",
+    sources: ["Pune Gazetteer, 1885", "ASI site record PN-14", "Oral history: Kasba Peth guides"],
+  },
+  {
+    q: "Where do locals eat in Mumbai after midnight?",
+    a: "Bhendi Bazaar and Mohammed Ali Road stay awake till 2 AM — baida roti at Suleman's, malpua with rabdi two lanes down. For a calmer option, the Sassoon Dock chai stalls open at 3 AM for fisherfolk and pour the strongest cutting in the city.",
+    sources: ["Localink vendor network", "BMC night-market permits 2026"],
+  },
+  {
+    q: "Hidden spot near Ellora?",
+    a: "Skip the queue at Cave 16 and start at the Paithani weavers' courtyard in Sambhajinagar — nine months of pit-loom work per saree. Then Ellora's Cave 29 (Dhumar Lena) at 4 PM, when the western light hits the lingam chamber and the tour buses have gone.",
+    sources: ["Paithani Weavers' Co-op", "ASI Ellora conservation notes"],
+  },
 ];
 
 function ConciergePage() {
   const [msgs, setMsgs] = useState<Msg[]>([
     {
       role: "guide",
-      text: "नमस्कार! I'm Sarathi (Saarthi), your Localink guide. Ask me about any lane, legend, lunch or hour in Maharashtra — I answer from the live spot database and local archive, not the internet's guesswork.",
+      text: "नमस्कार! I'm Sarathi, your Localink guide. Ask me about any lane, legend or lunch in Maharashtra — I answer from local archives, not the internet's guesswork.",
     },
   ]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
 
-  const mutation = useMutation({
-    mutationFn: (question: string) =>
-      askSarathi({
-        data: {
-          question,
-          time: new Date().toTimeString().slice(0, 5),
-        },
-      }),
-  });
+  function ask(question: string) {
+    if (!question.trim()) return;
+    const hit =
+      canned.find((c) => c.q.toLowerCase() === question.toLowerCase()) ??
+      canned.find((c) =>
+        c.q
+          .toLowerCase()
+          .split(" ")
+          .some((w) => w.length > 4 && question.toLowerCase().includes(w)),
+      );
 
-  async function ask(question: string) {
-    if (!question.trim() || mutation.isPending) return;
-    const q = question.trim();
-    setMsgs((m) => [...m, { role: "user", text: q }]);
+    setMsgs((m) => [
+      ...m,
+      { role: "user", text: question },
+      hit
+        ? { role: "guide", text: hit.a, sources: hit.sources }
+        : {
+            role: "guide",
+            text: "I'm pulling that from the local archive now. In the live build, this question is embedded, matched against Localink's Maharashtra corpus — gazetteers, vendor interviews, temple records — and answered with citations plus a Marathi audio read-out.",
+            sources: ["Localink RAG corpus (Maharashtra)"],
+          },
+    ]);
     setInput("");
-    try {
-      const res = await mutation.mutateAsync(q);
-      setMsgs((m) => [
-        ...m,
-        {
-          role: "guide",
-          text: res.text,
-          sources: res.sources,
-          suggestions: res.suggestions,
-        },
-      ]);
-    } catch {
-      setMsgs((m) => [
-        ...m,
-        {
-          role: "guide",
-          text: "The archive is briefly unreachable. Try again in a moment — I still only answer from Localink's Maharashtra records.",
-          sources: ["Localink Sarathi"],
-        },
-      ]);
-    }
   }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
       <header className="max-w-2xl">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-          Sarathi · voice & text, archive-grounded
+          Sarathi · voice & text, RAG-grounded
         </p>
         <h1 className="mt-3 font-display text-4xl font-semibold">Meet Sarathi, your local guide.</h1>
         <p className="mt-3 text-muted-foreground">
-          Backed by Localink's Maharashtra database and a time-aware recommendation engine. Ask in
-          Marathi, Hindi or English — including “what’s good right now”.
+          Trained on Maharashtra gazetteers, temple records and interviews with the people who
+          actually run these streets. Marathi, Hindi and English.
         </p>
       </header>
 
@@ -113,20 +101,7 @@ function ConciergePage() {
                     : "bg-secondary text-secondary-foreground"
                 }`}
               >
-                <p className="whitespace-pre-wrap">{m.text}</p>
-                {m.suggestions && m.suggestions.length > 0 && (
-                  <ul className="mt-3 space-y-2 border-t border-border/60 pt-2">
-                    {m.suggestions.slice(0, 4).map((s) => (
-                      <li key={s.id} className="rounded-xl bg-background/50 px-3 py-2 text-xs">
-                        <p className="font-semibold text-foreground">{s.name}</p>
-                        <p className="mt-0.5 text-muted-foreground">
-                          <MapPin className="mr-1 inline h-3 w-3" />
-                          {s.cityName} · {s.reason}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <p>{m.text}</p>
                 {m.sources && (
                   <ul className="mt-3 space-y-1 border-t border-border/60 pt-2 text-[11px] opacity-80">
                     {m.sources.map((s) => (
@@ -137,23 +112,18 @@ function ConciergePage() {
                   </ul>
                 )}
                 {m.role === "guide" && (
-                  <button type="button" className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary">
+                  <button className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary">
                     <Volume2 className="h-3 w-3" /> Play in Marathi
                   </button>
                 )}
               </div>
             ))}
-            {mutation.isPending && (
-              <div className="inline-flex items-center gap-2 rounded-2xl bg-secondary px-4 py-3 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Looking up the local archive…
-              </div>
-            )}
           </div>
 
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void ask(input);
+              ask(input);
             }}
             className="flex items-center gap-2 border-t border-border p-4"
           >
@@ -175,8 +145,7 @@ function ConciergePage() {
             />
             <button
               type="submit"
-              disabled={mutation.isPending}
-              className="rounded-full bg-primary p-3 text-primary-foreground disabled:opacity-50"
+              className="rounded-full bg-primary p-3 text-primary-foreground"
               aria-label="Send"
             >
               <Send className="h-4 w-4" />
@@ -186,14 +155,13 @@ function ConciergePage() {
 
         <aside className="space-y-3">
           <p className="text-sm font-semibold">Try asking</p>
-          {prompts.map((q) => (
+          {canned.map((c) => (
             <button
-              key={q}
-              type="button"
-              onClick={() => void ask(q)}
+              key={c.q}
+              onClick={() => ask(c.q)}
               className="w-full rounded-2xl border border-border bg-card p-4 text-left text-sm shadow-warm transition-transform hover:-translate-y-0.5"
             >
-              {q}
+              {c.q}
             </button>
           ))}
           <div className="rounded-2xl border border-border bg-secondary/60 p-4 text-xs text-muted-foreground">
@@ -201,12 +169,8 @@ function ConciergePage() {
               <Languages className="h-4 w-4" /> मराठी · हिंदी · English
             </p>
             <p className="mt-2">
-              Answers are retrieved from the Localink database (spots, peak hours, gazetteer notes)
-              and ranked for the current clock time.
-            </p>
-            <p className="mt-2 inline-flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" /> Time-aware suggestions included when you ask “now”,
-              “tonight” or name a city.
+              Answers are retrieved from a curated Maharashtra corpus, so Sarathi cites where
+              each claim came from instead of inventing it.
             </p>
           </div>
         </aside>

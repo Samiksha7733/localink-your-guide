@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   Clock,
@@ -12,11 +11,9 @@ import {
   AlertTriangle,
   UserCheck,
   Star,
-  Sparkles,
 } from "lucide-react";
 import { cities, spots, type CityId, type Spot } from "@/data/maharashtra";
 import { MapCanvas } from "@/components/MapCanvas";
-import { getRecommendations } from "@/server/fns";
 
 export const Route = createFileRoute("/itinerary")({
   head: () => ({
@@ -77,7 +74,7 @@ function trafficLabel(mins: number) {
   return f >= 1.7 ? "Heavy traffic" : f > 1 ? "Moderate traffic" : "Clear roads";
 }
 
-function fallbackScore(spot: Spot, weather: Weather, slot: Slot, crowdTolerance: number) {
+function score(spot: Spot, weather: Weather, slot: Slot, crowdTolerance: number) {
   let s = 100;
   s -= Math.max(0, spot.crowd - crowdTolerance) * 1.2;
   if (weather === "rain" && spot.category === "Nature") s -= 45;
@@ -88,6 +85,7 @@ function fallbackScore(spot: Spot, weather: Weather, slot: Slot, crowdTolerance:
   if (slot === "evening" && spot.peak.includes("PM")) s += 14;
   if (slot === "afternoon" && spot.category === "Heritage") s += 12;
   if (spot.hidden) s += 16;
+  // Ratings actively influence what gets recommended, not just what's displayed.
   s += (spot.rating - 3.5) * 22;
   s += Math.min(12, spot.reviews / 60);
   return s;
@@ -139,42 +137,20 @@ function ItineraryPage() {
   const minBudget = MIN_BUDGET_PER_PERSON * groupSize;
   const effectiveBudget = Math.max(budget, minBudget);
 
-  const recQuery = useQuery({
-    queryKey: ["recommend", cityId, startTime, weather, crowdTolerance, seed],
-    queryFn: () =>
-      getRecommendations({
-        data: {
-          cityId,
-          time: startTime,
-          weather,
-          crowdTolerance,
-          limit: 14,
-          includeNearby: true,
-        },
-      }),
-  });
-
-  const rankedIds = recQuery.data?.spots.map((s) => s.id) ?? [];
-
   const guides = useMemo(() => guidesFor(city.name), [city.name]);
   const guide = guides[0]!;
   const guideCost = wantGuide ? Math.ceil(windowMins / 60) * guide.feePerHour : 0;
 
   const plan = useMemo(() => {
     const spendable = Math.max(0, effectiveBudget - guideCost);
-    const byId = new Map(spots.map((s) => [s.id, s]));
-    const enginePool = rankedIds
-      .map((id) => byId.get(id))
-      .filter((s): s is Spot => Boolean(s));
-    const rest = spots
-      .filter((s) => s.city === cityId && !rankedIds.includes(s.id))
+    const pool = spots
+      .filter((s) => s.city === cityId)
       .map((s) => ({
         s,
-        v: fallbackScore(s, weather, slotFromMins(start), crowdTolerance) + ((seed * 7 + s.id.length) % 5),
+        v: score(s, weather, slotFromMins(start), crowdTolerance) + ((seed * 7 + s.id.length) % 5),
       }))
       .sort((a, b) => b.v - a.v)
       .map((x) => x.s);
-    const pool = [...enginePool, ...rest];
 
     const legs: Leg[] = [];
     const notes: string[] = [];
@@ -202,18 +178,7 @@ function ItineraryPage() {
     }
 
     return { legs, spent, spendable };
-  }, [
-    cityId,
-    weather,
-    start,
-    end,
-    crowdTolerance,
-    seed,
-    groupSize,
-    effectiveBudget,
-    guideCost,
-    rankedIds,
-  ]);
+  }, [cityId, weather, start, end, crowdTolerance, seed, groupSize, effectiveBudget, guideCost]);
 
   const { legs, spent } = plan;
   const totalCost = spent + guideCost;
@@ -260,9 +225,8 @@ function ItineraryPage() {
         </p>
         <h1 className="mt-3 font-display text-4xl font-semibold">A schedule, not a wishlist.</h1>
         <p className="mt-3 text-muted-foreground">
-          Give us your window, your group and your budget. The recommendation engine times every
-          stop around live traffic, weather, peak hours and crowd levels — and Sarathi can explain
-          why.
+          Give us your window, your group and your budget. Sarathi times every stop around live
+          traffic, weather and crowd levels — and tells you where it had to compromise.
         </p>
       </header>
 
@@ -448,31 +412,6 @@ function ItineraryPage() {
             ))}
           </div>
 
-          {recQuery.data && recQuery.data.spots.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-warm">
-              <p className="inline-flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="h-4 w-4 text-primary" /> More spots at {startTime}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{recQuery.data.summary}</p>
-              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                {recQuery.data.spots.slice(0, 10).map((s) => (
-                  <li key={s.id} className="rounded-xl border border-border p-3 text-sm">
-                    <p className="font-medium">
-                      {s.name}
-                      {s.nearby ? (
-                        <span className="ml-2 text-[10px] uppercase tracking-wide text-primary">Nearby</span>
-                      ) : null}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {s.when === "now" ? "Good now" : s.when === "soon" ? "Peak soon" : "Better later"}{" "}
-                      · {s.peak} · ★ {s.rating} · {s.cost === 0 ? "Free" : `₹${s.cost}`}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">{s.reason}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           {limitations.length > 0 && (
             <div className="rounded-2xl border border-accent/40 bg-accent/10 p-5">
               <p className="inline-flex items-center gap-2 text-sm font-semibold">

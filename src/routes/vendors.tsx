@@ -71,13 +71,9 @@ const seedListings: Listing[] = [
   },
 ];
 
-import { ApiClient } from "@/lib/api-client";
-import { useEffect } from "react";
-
 function VendorsPage() {
-  const [listings, setListings] = useState<Listing[]>(seedListings);
+  const [listings, setListings] = useState(seedListings);
   const [done, setDone] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
     host: "",
@@ -87,48 +83,20 @@ function VendorsPage() {
     kind: "Food stall",
   });
 
-  useEffect(() => {
-    ApiClient.getVendors()
-      .then((data) => {
-        if (data && data.length > 0) {
-          setListings(data);
-        }
-      })
-      .catch(() => {
-        // use default seedListings
-      });
-  }, []);
-
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.host || loading) return;
-    setLoading(true);
-
-    const price = form.price.startsWith("₹") ? form.price : `₹${form.price || "0"}`;
-    const newEntry: Listing = {
-      id: crypto.randomUUID(),
-      ...form,
-      price,
-    };
-
-    try {
-      const saved = await ApiClient.publishVendor({
-        name: form.name,
-        host: form.host,
-        city: form.city,
-        price: form.price,
-        window: form.window,
-        kind: form.kind,
-      });
-      setListings((l) => [saved, ...l.filter((item) => item.id !== saved.id)]);
-    } catch {
-      setListings((l) => [newEntry, ...l]);
-    } finally {
-      setLoading(false);
-      setDone(true);
-      setForm({ name: "", host: "", city: cities[1]?.name ?? "Pune", price: "", window: "", kind: "Food stall" });
-      setTimeout(() => setDone(false), 3500);
-    }
+    if (!form.name || !form.host) return;
+    setListings((l) => [
+      {
+        id: crypto.randomUUID(),
+        ...form,
+        price: form.price.startsWith("₹") ? form.price : `₹${form.price || "0"}`,
+      },
+      ...l,
+    ]);
+    setDone(true);
+    setForm({ name: "", host: "", city: cities[1]?.name ?? "Pune", price: "", window: "", kind: "Food stall" });
+    setTimeout(() => setDone(false), 3500);
   }
 
   const field =

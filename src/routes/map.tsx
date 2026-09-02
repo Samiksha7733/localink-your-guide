@@ -1,10 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Leaf, Flame, Clock, Search, Sparkles } from "lucide-react";
+import { Leaf, Flame, Clock, Search } from "lucide-react";
 import { cities, spots, type CityId } from "@/data/maharashtra";
 import { MapCanvas } from "@/components/MapCanvas";
-import { getRecommendations } from "@/server/fns";
 
 export const Route = createFileRoute("/map")({
   head: () => ({
@@ -32,7 +30,6 @@ function MapPage() {
   const [cat, setCat] = useState<(typeof categories)[number]>("All");
   const [ecoOnly, setEcoOnly] = useState(false);
   const [query, setQuery] = useState("");
-  const [hour, setHour] = useState(() => new Date().toTimeString().slice(0, 5));
 
   const city = cities.find((c) => c.id === cityId)!;
 

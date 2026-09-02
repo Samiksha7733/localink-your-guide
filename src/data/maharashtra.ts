@@ -10,7 +10,6 @@ import coastImg from "@/assets/scene-coast.jpg";
 import ghatsImg from "@/assets/scene-ghats.jpg";
 import templeImg from "@/assets/scene-temple.jpg";
 import townImg from "@/assets/scene-town.jpg";
-import { timedSpots } from "@/data/timed-spots";
 
 export type Spot = {
   id: string;
@@ -624,7 +623,6 @@ const seedSpots: SpotSeed[] = [
     hidden: false,
     blurb: "Hapus straight off the tree in season, amba poli the rest of the year.",
   },
-  ...timedSpots,
 ];
 
 
